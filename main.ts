@@ -1,89 +1,108 @@
-/**
- * Emakefun 5-Way Tracking Sensor V2.0 Extension
- * Official register-based implementation
- */
-
-//% weight=100 color=#3CA6FF icon="\uf41b" block="FiveWayTracker"
-namespace fiveway {
+//% weight=100 color=#0080FF icon="\uf063" block="FiveWayTracker V3"
+namespace FiveWayTracker {
 
     const I2C_ADDR = 0x50
-    const ANALOG_START = 0x02   // 10 bytes (S0~S4)
-    const DIGITAL_ADDR = 0x0C   // 1 byte
 
-    /**
-     * I2C에서 n바이트 읽기
-     */
-    function i2cRead(buf: number, len: number): Buffer {
-        pins.i2cWriteNumber(I2C_ADDR, buf, NumberFormat.UInt8BE)
-        return pins.i2cReadBuffer(I2C_ADDR, len)
+    // Register map (Arduino 라이브러리 기반)
+    const REG_DEVICE_ID = 0x00
+    const REG_FIRMWARE = 0x01
+
+    const REG_ANALOG_BASE = 0x10  // S0=0x10/0x11 ~ S4=0x18/0x19
+    const REG_DIGITAL = 0x1A      // bit-pack digital S0~S4
+
+    const REG_THRESHOLD_HIGH = 0x1C   // 2바이트씩 5개
+    const REG_THRESHOLD_LOW = 0x26    // 2바이트씩 5개
+
+
+    //---------------------------------------------
+    // 🔹 내부 I2C 통신 함수
+    //---------------------------------------------
+
+    function readU8(reg: number): number {
+        pins.i2cWriteNumber(I2C_ADDR, reg, NumberFormat.UInt8BE)
+        return pins.i2cReadNumber(I2C_ADDR, NumberFormat.UInt8BE)
     }
 
-    /**
-     * 센서 RAW 값 읽기 (0~1023 범위)
-     * @param index 센서 번호 0~4
-     */
-    //% block="read RAW of sensor %index"
-    //% index.min=0 index.max=4
-    export function readRaw(index: number): number {
-        const buffer = i2cRead(ANALOG_START, 10)
-        const high = buffer[index * 2]
-        const low = buffer[index * 2 + 1]
-        return (high << 8) | low
+    function readU16(reg: number): number {
+        pins.i2cWriteNumber(I2C_ADDR, reg, NumberFormat.UInt8BE)
+        return pins.i2cReadNumber(I2C_ADDR, NumberFormat.UInt16BE)
     }
 
-    /**
-     * 전체 RAW 배열 읽기
-     * @returns number[] (길이 5)
-     */
-    //% block="read all RAW values"
-    export function readAllRaw(): number[] {
-        const buffer = i2cRead(ANALOG_START, 10)
-        let result: number[] = []
-        for (let i = 0; i < 5; i++) {
-            const high = buffer[i * 2]
-            const low = buffer[i * 2 + 1]
-            const raw = (high << 8) | low
-            result.push(raw)
-        }
-        return result
+    function writeU16(reg: number, value: number) {
+        let buf = pins.createBuffer(3)
+        buf[0] = reg
+        buf[1] = (value >> 8) & 0xFF
+        buf[2] = value & 0xFF
+        pins.i2cWriteBuffer(I2C_ADDR, buf)
     }
 
-    /**
-     * 디지털 판정 읽기
-     * 1 = White, 0 = Black
-     */
-    //% block="digital state of sensor %index"
-    //% index.min=0 index.max=4
-    export function readDigital(index: number): number {
-        const buffer = i2cRead(DIGITAL_ADDR, 1)
-        const bits = buffer[0]
-        return (bits >> index) & 0x01
+    //---------------------------------------------
+    // 🔹 Device Info
+    //---------------------------------------------
+
+    //% block="get device ID"
+    export function getDeviceID(): number {
+        return readU8(REG_DEVICE_ID)
     }
 
-    /**
-     * 전체 디지털 상태 배열 반환
-     */
-    //% block="read all digital states"
-    export function readAllDigital(): number[] {
-        const buffer = i2cRead(DIGITAL_ADDR, 1)
-        let bits = buffer[0]
-        let result: number[] = []
-        for (let i = 0; i < 5; i++) {
-            result.push((bits >> i) & 0x01)
-        }
-        return result
+    //% block="get firmware version"
+    export function getFirmware(): number {
+        return readU8(REG_FIRMWARE)
     }
 
-    /**
-     * RAW 기반 threshold 판정
-     * @param index 0~4 센서 번호
-     * @param threshold 기준값
-     */
-    //% block="is sensor %index over %threshold ?"
-    //% index.min=0 index.max=4
-    export function isOver(index: number, threshold: number): boolean {
-        const raw = readRaw(index)
-        return raw > threshold
+    //---------------------------------------------
+    // 🔹 RAW Analog Reading (0~65535)
+    //---------------------------------------------
+
+    //% block="read RAW value of sensor %channel"
+    //% channel.min=0 channel.max=4
+    export function readRaw(channel: number): number {
+        if (channel < 0 || channel > 4) return 0
+        let reg = REG_ANALOG_BASE + channel * 2
+        return readU16(reg)
+    }
+
+    //---------------------------------------------
+    // 🔹 Digital (0 or 1)
+    //---------------------------------------------
+
+    //% block="read digital value of sensor %channel"
+    //% channel.min=0 channel.max=4
+    export function readDigital(channel: number): number {
+        if (channel < 0 || channel > 4) return 0
+        let data = readU8(REG_DIGITAL)
+        return (data >> channel) & 0x01
+    }
+
+    //---------------------------------------------
+    // 🔹 Threshold Read & Write
+    //---------------------------------------------
+
+    //% block="set HIGH threshold of sensor %channel to %value"
+    //% channel.min=0 channel.max=4
+    export function setHighThreshold(channel: number, value: number) {
+        if (channel < 0 || channel > 4) return
+        writeU16(REG_THRESHOLD_HIGH + channel * 2, value)
+    }
+
+    //% block="set LOW threshold of sensor %channel to %value"
+    //% channel.min=0 channel.max=4
+    export function setLowThreshold(channel: number, value: number) {
+        if (channel < 0 || channel > 4) return
+        writeU16(REG_THRESHOLD_LOW + channel * 2, value)
+    }
+
+    //% block="read HIGH threshold of sensor %channel"
+    //% channel.min=0 channel.max=4
+    export function readHighThreshold(channel: number): number {
+        if (channel < 0 || channel > 4) return 0
+        return readU16(REG_THRESHOLD_HIGH + channel * 2)
+    }
+
+    //% block="read LOW threshold of sensor %channel"
+    //% channel.min=0 channel.max=4
+    export function readLowThreshold(channel: number): number {
+        if (channel < 0 || channel > 4) return 0
+        return readU16(REG_THRESHOLD_LOW + channel * 2)
     }
 }
-
