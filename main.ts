@@ -1,94 +1,89 @@
 /**
- * Emakefun I2C 5-Way Line Sensor (ITR9909)
- * FINAL VERSION — Sensor-specific threshold + flip correction
- * Verified with real RAW data by BoundaryX
+ * Emakefun 5-Way Tracking Sensor V2.0 Extension
+ * Official register-based implementation
  */
 
-namespace emakefunLine {
+//% weight=100 color=#3CA6FF icon="\uf41b" block="FiveWayTracker"
+namespace fiveway {
 
     const I2C_ADDR = 0x50
-
-    // Sensor-specific threshold (calculated from real white/black measurements)
-    const threshold = [45450, 37200, 25525, 45175, 41000]
-
-    // Sensor-specific polarity (true = black > white)
-    const flip = [false, true, true, false, false]
-
-    let initialized = false
+    const ANALOG_START = 0x02   // 10 bytes (S0~S4)
+    const DIGITAL_ADDR = 0x0C   // 1 byte
 
     /**
-     * Initialize the sensor (Enable MCU & Gain)
+     * I2C에서 n바이트 읽기
      */
-    function init(): void {
-        if (initialized) return
-
-        // Enable MCU
-        pins.i2cWriteNumber(I2C_ADDR, 0x00, NumberFormat.UInt8BE)
-        pins.i2cWriteNumber(I2C_ADDR, 0x01, NumberFormat.UInt8BE)
-
-        // Gain preset
-        pins.i2cWriteNumber(I2C_ADDR, 0x20, NumberFormat.UInt8BE)
-        pins.i2cWriteNumber(I2C_ADDR, 0x01, NumberFormat.UInt8BE)
-
-        initialized = true
+    function i2cRead(buf: number, len: number): Buffer {
+        pins.i2cWriteNumber(I2C_ADDR, buf, NumberFormat.UInt8BE)
+        return pins.i2cReadBuffer(I2C_ADDR, len)
     }
 
     /**
-     * Read 16-bit big-endian sensor value
+     * 센서 RAW 값 읽기 (0~1023 범위)
+     * @param index 센서 번호 0~4
      */
-    function read16(reg: number): number {
-        init()
-        pins.i2cWriteNumber(I2C_ADDR, reg, NumberFormat.UInt8BE)
-        return pins.i2cReadNumber(I2C_ADDR, NumberFormat.UInt16BE)
-    }
-
-    /**
-     * Get RAW 16-bit value of S0~S4
-     */
-    //% block="get raw value of sensor %index"
+    //% block="read RAW of sensor %index"
     //% index.min=0 index.max=4
-    export function raw(index: number): number {
-        let reg = 0
-        switch (index) {
-            case 0: reg = 0x10; break
-            case 1: reg = 0x12; break
-            case 2: reg = 0x14; break
-            case 3: reg = 0x16; break
-            case 4: reg = 0x18; break
-            default: reg = 0x10
-        }
-        return read16(reg)
+    export function readRaw(index: number): number {
+        const buffer = i2cRead(ANALOG_START, 10)
+        const high = buffer[index * 2]
+        const low = buffer[index * 2 + 1]
+        return (high << 8) | low
     }
 
     /**
-     * Final binary decision for each sensor
-     * 1 = black, 0 = white
+     * 전체 RAW 배열 읽기
+     * @returns number[] (길이 5)
      */
-    //% block="read sensor %index (0 white / 1 black)"
+    //% block="read all RAW values"
+    export function readAllRaw(): number[] {
+        const buffer = i2cRead(ANALOG_START, 10)
+        let result: number[] = []
+        for (let i = 0; i < 5; i++) {
+            const high = buffer[i * 2]
+            const low = buffer[i * 2 + 1]
+            const raw = (high << 8) | low
+            result.push(raw)
+        }
+        return result
+    }
+
+    /**
+     * 디지털 판정 읽기
+     * 1 = White, 0 = Black
+     */
+    //% block="digital state of sensor %index"
     //% index.min=0 index.max=4
-    export function read(index: number): number {
-        const v = raw(index)
-
-        if (!flip[index]) {
-            // Normal: white > black
-            return (v < threshold[index]) ? 1 : 0
-        } else {
-            // Flipped: black > white
-            return (v >= threshold[index]) ? 1 : 0
-        }
+    export function readDigital(index: number): number {
+        const buffer = i2cRead(DIGITAL_ADDR, 1)
+        const bits = buffer[0]
+        return (bits >> index) & 0x01
     }
 
     /**
-     * Read 5-sensor pattern as 5-bit number
-     * Example: 01110 = 14
+     * 전체 디지털 상태 배열 반환
      */
-    //% block="get line pattern (5-bit)"
-    export function getPattern(): number {
-        let b0 = read(0)
-        let b1 = read(1)
-        let b2 = read(2)
-        let b3 = read(3)
-        let b4 = read(4)
-        return (b0 << 4) | (b1 << 3) | (b2 << 2) | (b3 << 1) | b4
+    //% block="read all digital states"
+    export function readAllDigital(): number[] {
+        const buffer = i2cRead(DIGITAL_ADDR, 1)
+        let bits = buffer[0]
+        let result: number[] = []
+        for (let i = 0; i < 5; i++) {
+            result.push((bits >> i) & 0x01)
+        }
+        return result
+    }
+
+    /**
+     * RAW 기반 threshold 판정
+     * @param index 0~4 센서 번호
+     * @param threshold 기준값
+     */
+    //% block="is sensor %index over %threshold ?"
+    //% index.min=0 index.max=4
+    export function isOver(index: number, threshold: number): boolean {
+        const raw = readRaw(index)
+        return raw > threshold
     }
 }
+
