@@ -1,4 +1,4 @@
-//% weight=100 color=#0080FF icon="\uf063" block="FiveWayTracker V3"
+//% weight=100 color=#0080FF icon="\uf063" block="FiveWay Linesensor"
 namespace FiveWayTracker {
 
     const I2C_ADDR = 0x50
