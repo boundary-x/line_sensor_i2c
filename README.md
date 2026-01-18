@@ -1,5 +1,70 @@
+# 5-Way Line Sensor Extension for MakeCode
 
-> 이 페이지를 [https://boundary-x.github.io/line_sensor_i2c/](https://boundary-x.github.io/line_sensor_i2c/)으로 열기
+This extension allows you to control the **I2C 5-Channel Line Tracking Sensor** with the BBC micro:bit.
+It provides easy-to-use blocks for reading digital states, raw analog values, and calibrating thresholds.
+
+> **Developed by [Boundary X](http://boundaryx.io)**
+
+## Hardware Connection
+
+The sensor communicates via the **I2C interface** (Default Address: `0x50`).
+Connect the sensor to the micro:bit as follows:
+
+* **VCC**: 3.3V (or 5V depending on sensor specifications)
+* **GND**: GND
+* **SDA**: Pin 20
+* **SCL**: Pin 19
+
+## Usage
+
+### 1. Read Digital Values
+Reads the simple On/Off state of the sensor. This is useful for basic line following logic.
+* **Returns**: `0` (Line detected) or `1` (Background), *logic may vary depending on hardware.*
+* **Channel**: `0` to `4`
+
+```blocks
+basic.forever(function () {
+    // Example: If the center sensor (2) sees the line (0)
+    if (FiveWayTracker.readDigital(2) == 0) {
+        basic.showIcon(IconNames.Happy)
+    } else {
+        basic.showIcon(IconNames.Sad)
+    }
+})
+```
+
+### 2. Read Raw Analog Values
+Reads the raw sensor value for precision control (e.g., PID algorithms).
+* **Returns**: 0 ~ 65535 (16-bit integer).
+```blocks
+let sensorVal = FiveWayTracker.readRaw(2)
+serial.writeValue("Center", sensorVal)
+```
+
+### 3. Calibration (Thresholds)
+You can set the sensitivity of the digital detection by adjusting the High/Low thresholds.
+* **High Threshold**: Above this value, the sensor state is considered High (e.g., White).
+* **Low Threshold**: Below this value, the sensor state is considered Low (e.g., Black).
+```blocks
+// Set thresholds for Channel 2
+FiveWayTracker.setHighThreshold(2, 40000)
+FiveWayTracker.setLowThreshold(2, 20000)
+```
+
+### API Documentation
+* getDeviceID(): Returns the device ID (Register 0x00).
+* getFirmware(): Returns the firmware version (Register 0x01).
+* readRaw(channel): Reads the 16-bit analog value of the specified channel (0-4).
+* readDigital(channel): Reads the digital value (0 or 1) of the specified channel.
+* setHighThreshold(channel, value): Sets the high threshold for hysteresis.
+* setLowThreshold(channel, value): Sets the low threshold for hysteresis.
+
+### About
+This extension was developed by Boundary X. We provide AI and digital education solutions for schools and institutions.
+
+### License
+MIT
+
 
 ## 확장으로 사용
 
