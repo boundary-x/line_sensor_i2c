@@ -1,6 +1,7 @@
 {
     "name": "line_sensor_i2c",
     "description": "",
+    "license": "MIT",
     "dependencies": {
         "core": "*",
         "microphone": "*"
@@ -20,6 +21,5 @@
     "supportedTargets": [
         "microbit"
     ],
-    "preferredEditor": "tsprj",
-    "license": "MIT"
+    "preferredEditor": "tsprj"
 }
